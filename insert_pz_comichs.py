@@ -6,11 +6,12 @@ insert data in table ipa2 from a csv file
 """
 #import csv
 import pandas as pd
+import traceback
 from db_connection import con_get
 import littleLogging as logging
 
 
-class InsertPzComisaria():
+class Insert_pz_comichs():
 
     column_names = {'miteco': None, 'fecha': None, 'pnp': None,
                     'situacion': None, 'instalado': None, 'tuboguia': None,
@@ -24,8 +25,9 @@ class InsertPzComisaria():
             col_names: column names in fi; all these names must exist
             sep: column separatos in fi
         """
+
         self.fi = fi
-        self.col_names = InsertPzComisaria.column_names
+        self.col_names = Insert_pz_comichs.column_names.copy()
         for k in self.col_names.keys():
             self.col_names[k] = col_names[k]
         self.red = red
@@ -150,7 +152,7 @@ class InsertPzComisaria():
         return not_found
 
 
-    def upsert(self, update: bool=True):
+    def upsert(self, update: bool=True, check: bool=True):
         """
         inserta fila a fila
             si existe ya la fila con la clave primaria que se desea insertar
@@ -173,34 +175,47 @@ class InsertPzComisaria():
         where cod=%s and fecha=%s
         """
 
-        if not self.checked_data_in_tables:
+        if check and not self.checked_data_in_tables:
             ok = self.check_data_in_tables()
             if not ok:
                 return
 
-        if not self.checked_booleans:
+        if check and not self.checked_booleans:
             ok = self.check_booleans()
             if not ok:
                 return
 
         cur = self.con.cursor()
+        nrows = self.data.shape[0] - 1
         for index, row in self.data.iterrows():
+            print(f'{index}/{nrows}')
             cur.execute(s0, (row['miteco'],))
             cod = cur.fetchone()[0]
             if cod is not None:
-                logging.append(f"{row['miteco']} not found", toSreen=False)
+                logging.append(f"{index} {row['miteco']} not found", False)
                 continue
             try:
                 cur.execute(insert, (cod, row['fecha'], row['situacion'],
                                      row['instalado'], row['tuboguia'],
                                      row['proyecto'], row['pnp'] ))
-                logging.append(f"{row['miteco']} inserted", toSreen=False)
+                logging.append(f"{index} {cod} {row['fecha']} inserted", False)
+                continue
             except:
                 if not update:
+                    logging.append(f"{index} {cod} {row['fecha']} exists " +
+                                   "and no updated", False)
                     continue
-
-
-
-
-
+            try:
+                cur.execute(update,
+                        (row['situacion'], row['instalado'],
+                         row['tuboguia'], row['proyecto'], row['pnp'],
+                         cod, row['fecha']))
+                logging.append(f"{index} {cod} {row['fecha']} updated", False)
+            except:
+                msg = traceback.format_exc()
+                logging.append(f"{index} {cod} {row['fecha']} error updating",
+                               False)
+                logging.append(f'{msg}')
+                return
+        self.con.commit()
 
