@@ -152,16 +152,22 @@ class Insert_pz_comichs():
         return not_found
 
 
-    def upsert(self, update: bool=True, check: bool=True):
+    def upsert(self, update: bool=True, check: bool=True) ->None:
         """
+        args:
+            update: si ==True hace un update cuando la fila ya existe
+            check: si True chekea los datos antes de insert-update
         inserta fila a fila
             si existe ya la fila con la clave primaria que se desea insertar
             actualiza sus contenidos en el caso de que update == True, en caso
             contrario no hace nada
+        la operación se hace fila a fila y se contabiliza el número de
+            insertados y el de actualizados, por lo que no se utiliza la
+            sentencia upsert de postgres
         """
         s0 = """select cod from ipas.ipa1_red_control
         where cod_red = %s and red = """ + f"'{self.red}'"
-
+        s1 = 'select cod from ipas.ipa2 where cod=%s and fecha=%s'
         insert = \
         """
         insert into ipas.ipa2 (cod, fecha, situacion, instalado,
@@ -171,7 +177,8 @@ class Insert_pz_comichs():
         update = \
         """
         update ipas.ipa2
-        set situacion, instalado, tuboguia, proyecto, pnp_original
+        set situacion=%s, instalado=%s, tuboguia=%s, proyecto=%s,
+        pnp_original=%s
         where cod=%s and fecha=%s
         """
 
@@ -187,35 +194,53 @@ class Insert_pz_comichs():
 
         cur = self.con.cursor()
         nrows = self.data.shape[0] - 1
+        miteco_not_found = inserted = updated = 0
         for index, row in self.data.iterrows():
             print(f'{index}/{nrows}')
             cur.execute(s0, (row['miteco'],))
-            cod = cur.fetchone()[0]
-            if cod is not None:
+            row1 = cur.fetchone()
+            if row1 is None:
                 logging.append(f"{index} {row['miteco']} not found", False)
+                miteco_not_found += 1
                 continue
-            try:
-                cur.execute(insert, (cod, row['fecha'], row['situacion'],
-                                     row['instalado'], row['tuboguia'],
-                                     row['proyecto'], row['pnp'] ))
-                logging.append(f"{index} {cod} {row['fecha']} inserted", False)
-                continue
-            except:
+            cod = row1[0]
+            cur.execute(s1, (cod, row['fecha']))
+            row1 = cur.fetchone()
+
+            if row1 is None:
+                try:
+                    cur.execute(insert, (cod, row['fecha'],
+                                         row['situacion'].lower(),
+                                         row['instalado'], row['tuboguia'],
+                                         row['proyecto'], row['pnp'] ))
+                    logging.append(f"{index} {cod} {row['fecha']} inserted",
+                                   False)
+                    inserted += 1
+                except:
+                    msg = traceback.format_exc()
+                    logging.append(f"{index} {cod} {row['fecha']} error " +\
+                                   f'inserting\n{msg}')
+                    return
+            else:
                 if not update:
-                    logging.append(f"{index} {cod} {row['fecha']} exists " +
-                                   "and no updated", False)
+                    logging.append(f"{index} {cod} {row['fecha']} not updated",
+                                   False)
                     continue
-            try:
-                cur.execute(update,
-                        (row['situacion'], row['instalado'],
-                         row['tuboguia'], row['proyecto'], row['pnp'],
-                         cod, row['fecha']))
-                logging.append(f"{index} {cod} {row['fecha']} updated", False)
-            except:
-                msg = traceback.format_exc()
-                logging.append(f"{index} {cod} {row['fecha']} error updating",
-                               False)
-                logging.append(f'{msg}')
-                return
+                try:
+                    cur.execute(update,
+                                (row['situacion'].lower(), row['instalado'],
+                                row['tuboguia'], row['proyecto'], row['pnp'],
+                                cod, row['fecha']))
+                    logging.append(f"{index} {cod} {row['fecha']} updated",
+                                   False)
+                    updated += 1
+                except:
+                    msg = traceback.format_exc()
+                    logging.append(f"{index} {cod} {row['fecha']} error " +\
+                                   f" updating\n{msg}")
+                    return
         self.con.commit()
+        print(f'miteco not found: {miteco_not_found:n}')
+        print(f'inserted: {inserted:n}')
+        print(f'updated: {updated}')
 
