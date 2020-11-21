@@ -291,7 +291,7 @@ class Upsert_ipas_ipa2():
                 except:
                     msg = traceback.format_exc()
                     logging.append(f"{index:n} {row[self.cod]} " \
-                                   f"{row[row[self.fecha]]} error " +\
+                                   f"{row[self.fecha]} error " +\
                                    f'updating\n{msg}')
                     return
         self.con.commit()

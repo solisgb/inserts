@@ -2,7 +2,7 @@
 """
 Created on Sat Nov 16 21:00:03 2019
 @author: solis
-insert data in table ipa2 from a csv file
+insert or update data in table ipa2. from a csv file
 """
 import pandas as pd
 import traceback
@@ -10,10 +10,11 @@ from db_connection import con_get
 import littleLogging as logging
 
 
-class Upsert_ipas_ipa2_h():
+class Upsert_ipas_ipa3():
 
-    column_names = {'cod': None, 'fecha': None, 'situacion': None, 'h': None,
-                    'proyecto': None, 'medidor': None}
+    column_names = {'cod': None, 'fecha': None, 'caudal_ls': None,
+                    'error': None, 'situacion': None, 'proyecto': None,
+                    'medidor': None}
 
 
     def __init__(self, fi: str, col_names: dict, sep: str=';',
@@ -40,7 +41,7 @@ class Upsert_ipas_ipa2_h():
         """
         from os.path import splitext
         self.fi = fi
-        self.col_names = Upsert_ipas_ipa2_h.column_names.copy()
+        self.col_names = Upsert_ipas_ipa3.column_names.copy()
         for k in self.col_names.keys():
             self.col_names[k] = col_names[k]
         self.sep = sep
@@ -68,13 +69,18 @@ class Upsert_ipas_ipa2_h():
 
 
     @property
-    def situacion(self):
-        return self.col_names['situacion']
+    def caudal_ls(self):
+        return self.col_names['caudal_ls']
 
 
     @property
-    def h(self):
-        return self.col_names['h']
+    def error(self):
+        return self.col_names['error']
+
+
+    @property
+    def situacion(self):
+        return self.col_names['situacion']
 
 
     @property
@@ -87,44 +93,44 @@ class Upsert_ipas_ipa2_h():
         return self.col_names['medidor']
 
 
-    def check_data_in_tables(self) ->None:
+    def check_data_in_tables(self) ->bool:
         """
-        chequea que los contenidos de las columnas en el fichero con los
-            datos a importar para comprobar que el valor es un código válido
-            en la columna de la tabla donde se va a insertar, que tiene una
-            restricción de clave foránea
-        Las columnas a chequear se especifican en columns_2_test, ({},..), en
-            que cada {} tiene 3 claves:
-                col_data: nombre de la columna a chequear en self.fi
-                table: nombre de la tabla donde se va a insertar
-                col: nombre de la columna de la tabla
+        chequea que los contenidos de determinadas columnas están en tablas
+            codificadas
         """
 
-        columns_2_test = \
-        (
-         {'col_data': self.cod,
-          'table': 'ipas.ipa1',
-          'col': 'cod'},
-         {'col_data': self.situacion,
-          'table': 'ipas.fsituaci',
-          'col': 'cod'},
-         {'col_data': self.proyecto,
-          'table': 'ipas.proyectos',
-          'col': 'cod'},
-         {'col_data': self.medidor,
-          'table': 'ipas.medidor',
-          'col': 'codigo'},
-        )
+        # columna códigos en toma
+        to_search = set(self.data[self.cod])
 
-        for item in columns_2_test:
-            select = f"select {item['col']} from {item['table']}" \
-            f" where {item['col']}=%s;"
-            to_search = set(self.data[item['col_data']])
-            text = f"{item['table']}.{item['col']}"
-            not_found = \
-            self.__data_in_table(to_search, select, text)
-            if not_found:
-                return False
+        s0 = """select cod from ipas.ipa1 where cod=%s"""
+        not_found = \
+        self.__data_in_table(to_search, s0, 'ipas.ipa1')
+        if not_found:
+            return False
+
+        # columna situacion
+        s0 = "select cod from ipas.ipa3_situacion where cod = %s"
+        to_search = set(self.data[self.situacion])
+        not_found = self.__data_in_table(to_search, s0,
+                                         'ipas.ipa3_situacion.cod')
+        if not_found:
+            return False
+
+        # columna medidor
+        s0 = "select codigo from ipas.medidor where codigo = %s"
+        to_search = set(self.data[self.medidor])
+        not_found = self.__data_in_table(to_search, s0,
+                                         'ipas.medidor.codigo')
+        if not_found:
+            return False
+
+        # columna proyecto
+        s0 = "select cod from ipas.proyectos where cod = %s"
+        to_search = set(self.data[self.proyecto])
+        not_found = self.__data_in_table(to_search, s0,
+                                         'public.proyectos.cod')
+        if not_found:
+            return False
 
         self.checked_data_in_tables = True
         return True
@@ -133,51 +139,37 @@ class Upsert_ipas_ipa2_h():
     def print_min_max(self, columns: list):
         """
         imprime los valores mínimo y máximo en columns
+        args:
+            nombre de las columns en self.fi en las que se desea mostrar
+            los valores mínimo y máximo
         """
         for column1 in columns:
-            col = self.data[column1]
-            print(f'Rango en {column1}: {min(col)} - {max(col)}')
+            items = self.data[column1]
+            print(f'Rango en {column1}: {min(items)} - {max(items)}')
 
 
     def __data_in_table(self, items: list, s0: str, table_column: str) ->list:
         """
-        check column content
+        executes select s0 for each element in items
         args:
-            items: elements to check
-            s0: select
+            items: elements to search
+            s0: select qith one parameter
             table_column: schema.table.column in witch items must exists
         """
         cur = self.con.cursor()
         not_found = []
         for item in items:
             cur.execute(s0,(item,))
-            row = cur.fetchone()[0]
+            row = cur.fetchone()
             if row is None:
                 not_found.append(item)
-        if not_found:
-            print(f'No existen {len(not_found):n}/{len(items):n)}' +
+        if len(not_found) > 0:
+            print(f'No existen {len(not_found):n}/{len(items):n} ' +
             f'en la tabla {table_column}')
             for item in not_found:
                 print(item)
         else:
             print(f'Todos los contenidos están en {table_column}')
-        return not_found
-
-
-    def __are_booleans(self, items: list, table_column: str) ->list:
-        """
-        chequea columnas lógicas (bbol) en csv file
-        """
-
-        not_found = [item for item in items
-                     if item.lower() not in ('y', 's', 'n', 1, 0, None)]
-        if not_found:
-            print(f'Hay {len(not_found):n}/{len(items):n)}' +
-            f'no booleanos en {table_column}')
-            for item in not_found:
-                print(item)
-        else:
-            print(f'Todos los contenidos en {table_column} son booleanos')
         return not_found
 
 
@@ -194,17 +186,18 @@ class Upsert_ipas_ipa2_h():
             insertados y el de actualizados, por lo que no se utiliza la
             sentencia upsert de postgres
         """
-        s0 = "select cod from ipas.ipa1 where cod = %s"
-        s1 = 'select cod from ipas.ipa2_h where cod=%s and fecha=%s'
+        s0 = "select cod from ipas.ipa1 where cod=%s"
+        s1 = 'select cod from ipas.ipa3 where cod=%s and fecha=%s'
         insert = \
         """
-        insert into ipas.ipa2_h (cod, fecha, situacion, h, proyecto, medidor)
-        values (%s, %s, %s, %s, %s, %s);
+        insert into ipas.ipa3 (cod, fecha, caudal_ls, error, situacion,
+                               proyecto, medidor)
+        values (%s, %s, %s, %s, %s, %s, %s);
         """
         update = \
         """
-        update ipas.ipa2_h
-        set situacion=%s, h=%s, proyecto=%s, medidor=%s
+        update ipas.ipa3
+        set caudal_ls=%s, error=%s, situacion=%s, proyecto=%s, medidor=%s
         where cod=%s and fecha=%s
         """
 
@@ -231,7 +224,8 @@ class Upsert_ipas_ipa2_h():
                 try:
                     cur.execute(insert,
                                 (row[self.cod], row[self.fecha],
-                                 row[self.situacion], row[self.h],
+                                 row[self.caudal_ls], row[self.error],
+                                 row[self.situacion],
                                  row[self.proyecto], row[self.medidor]))
                     logging.append(f"{index:n} {row[self.cod]} " \
                                    f"{row[self.fecha]} inserted", False)
@@ -249,8 +243,9 @@ class Upsert_ipas_ipa2_h():
                     continue
                 try:
                     cur.execute(update,
-                                (row[self.situacion], row[self.h],
-                                 row[self.proyecto], row[self.medidor],
+                                (row[self.caudal_ls], row[self.error],
+                                 row[self.situacion], row[self.proyecto],
+                                 row[self.medidor],
                                  row[self.cod], row[self.fecha]))
                     logging.append(f"{index:n} {row[self.cod]} " \
                                    f"{row['fecha']} updated", False)

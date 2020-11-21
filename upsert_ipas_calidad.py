@@ -10,10 +10,12 @@ from db_connection import con_get
 import littleLogging as logging
 
 
-class Upsert_ipas_ipa2_h():
+class Upsert_ipas_calidad():
 
-    column_names = {'cod': None, 'fecha': None, 'situacion': None, 'h': None,
-                    'proyecto': None, 'medidor': None}
+    column_names = {'cod': None, 'fecha': None, 'parametro': None,
+                    'fecha_a': None, 'metodo': None, 'laboratori': None,
+                    'proyecto': None, 'minuto': None, 'umbrald': None,
+                    'valor': None, 'medidor': None}
 
 
     def __init__(self, fi: str, col_names: dict, sep: str=';',
@@ -40,7 +42,7 @@ class Upsert_ipas_ipa2_h():
         """
         from os.path import splitext
         self.fi = fi
-        self.col_names = Upsert_ipas_ipa2_h.column_names.copy()
+        self.col_names = Upsert_ipas_calidad.column_names.copy()
         for k in self.col_names.keys():
             self.col_names[k] = col_names[k]
         self.sep = sep
@@ -68,18 +70,43 @@ class Upsert_ipas_ipa2_h():
 
 
     @property
-    def situacion(self):
-        return self.col_names['situacion']
+    def parametro(self):
+        return self.col_names['parametro']
 
 
     @property
-    def h(self):
-        return self.col_names['h']
+    def fecha_a(self):
+        return self.col_names['fecha_a']
+
+
+    @property
+    def metodo(self):
+        return self.col_names['metodo']
+
+
+    @property
+    def laboratori(self):
+        return self.col_names['laboratori']
 
 
     @property
     def proyecto(self):
         return self.col_names['proyecto']
+
+
+    @property
+    def minuto(self):
+        return self.col_names['minuto']
+
+
+    @property
+    def umbrald(self):
+        return self.col_names['umbrald']
+
+
+    @property
+    def valor(self):
+        return self.col_names['valor']
 
 
     @property
@@ -105,8 +132,14 @@ class Upsert_ipas_ipa2_h():
          {'col_data': self.cod,
           'table': 'ipas.ipa1',
           'col': 'cod'},
-         {'col_data': self.situacion,
-          'table': 'ipas.fsituaci',
+         {'col_data': self.parametro,
+          'table': 'ipas.ipa_parametros',
+          'col': 'cod'},
+         {'col_data': self.metodo,
+          'table': 'ipas.fmetodotoma',
+          'col': 'cod'},
+         {'col_data': self.laboratori,
+          'table': 'ipas.laboratorio',
           'col': 'cod'},
          {'col_data': self.proyecto,
           'table': 'ipas.proyectos',
@@ -195,17 +228,20 @@ class Upsert_ipas_ipa2_h():
             sentencia upsert de postgres
         """
         s0 = "select cod from ipas.ipa1 where cod = %s"
-        s1 = 'select cod from ipas.ipa2_h where cod=%s and fecha=%s'
+        s1 = 'select cod from ipas.ipa_calidad where cod=%s and fecha=%s ' \
+        'and parametro=%s'
         insert = \
         """
-        insert into ipas.ipa2_h (cod, fecha, situacion, h, proyecto, medidor)
-        values (%s, %s, %s, %s, %s, %s);
+        insert into ipas.ipa_calidad (cod, fecha, parametro, fecha_a, metodo,
+             laboratori, proyecto, minuto, umbrald, valor, medidor)
+        values (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s);
         """
         update = \
         """
-        update ipas.ipa2_h
-        set situacion=%s, h=%s, proyecto=%s, medidor=%s
-        where cod=%s and fecha=%s
+        update ipas.ipa_calidad
+        set fecha_a=%s, metodo=%s, laboratori=%s, proyecto=%s, minuto=%s,
+            umbrald=%s, valor=%s, medidor=%s
+        where cod=%s, fecha=%s, parametro=%s
         """
 
         if check and not self.checked_data_in_tables:
@@ -224,42 +260,52 @@ class Upsert_ipas_ipa2_h():
                 logging.append(f"{index} {row[self.cod]} not found", False)
                 not_found += 1
                 continue
-            cur.execute(s1, (row[self.cod], row[self.fecha]))
+            cur.execute(s1, (row[self.cod], row[self.fecha],
+                             row[self.parametro]))
             row1 = cur.fetchone()
 
             if row1 is None:
                 try:
                     cur.execute(insert,
                                 (row[self.cod], row[self.fecha],
-                                 row[self.situacion], row[self.h],
-                                 row[self.proyecto], row[self.medidor]))
+                                 row[self.parametro],
+                                 row[self.fecha_a], row[self.metodo],
+                                 row[self.laboratori], row[self.proyecto],
+                                 row[self.minuto], row[self.umbrald],
+                                 row[self.valor], row[self.medidor]))
                     logging.append(f"{index:n} {row[self.cod]} " \
-                                   f"{row[self.fecha]} inserted", False)
+                                   f"{row[self.fecha]} {row[self.parametro]} "\
+                                   " inserted", False)
                     inserted += 1
                 except:
                     msg = traceback.format_exc()
                     logging.append(f"{index:n} {row[self.cod]} " \
-                                   f"{row[self.fecha]} error " +\
-                                   f'inserting\n{msg}')
+                                   f"{row[self.fecha]} {row[self.parametro]}" \
+                                   f" error inserting\n{msg}")
                     return
             else:
                 if not update:
                     logging.append(f"{index:n} {row[self.cod]} " \
-                                   f"{row[self.fecha]} not updated", False)
+                                   f"{row[self.fecha]} {row[self.parametro]}" \
+                                   "not updated", False)
                     continue
                 try:
                     cur.execute(update,
-                                (row[self.situacion], row[self.h],
-                                 row[self.proyecto], row[self.medidor],
-                                 row[self.cod], row[self.fecha]))
+                                (row[self.fecha_a], row[self.metodo],
+                                 row[self.laboratori], row[self.proyecto],
+                                 row[self.minuto], row[self.umbrald],
+                                 row[self.valor], row[self.medidor],
+                                 row[self.cod], row[self.fecha],
+                                 row[self.parametro]))
                     logging.append(f"{index:n} {row[self.cod]} " \
-                                   f"{row['fecha']} updated", False)
+                                   f"{row['fecha']} {row[self.parametro]}" \
+                                   "updated", False)
                     updated += 1
                 except:
                     msg = traceback.format_exc()
                     logging.append(f"{index:n} {row[self.cod]} " \
-                                   f"{row[self.fecha]} error " +\
-                                   f'updating\n{msg}')
+                                   f"{row[self.fecha]} {row[self.parametro]}" \
+                                   f" error updating\n{msg}")
                     return
         self.con.commit()
         print(f'cod not found: {not_found:n}')
