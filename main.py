@@ -7,33 +7,21 @@ Created on Sun Nov  1 13:08:40 2020
 import littleLogging as logging
 
 # ===================data to complete========================
-excelf = \
-r'H:\off\chs\Aforos_CHS_20-21\trabajo\entregas\02_camp_202009\datos' \
-r'\datos_para_db_202009.xlsx'
-sheet_name = 'quimica'
-# correspondencia entre el nombre de las columnas en la tabla ipa2 -clave-
-# y el nombre de las columnas en el fichero csv o excel
-column_names = \
-{
-'cod': 'COD',
-'fecha': 'FECHA',
-'parametro': 'PARAMETRO',
-'fecha_a': 'FECHA_A',
-'metodo': 'METODO',
-'laboratori': 'LABORATORI',
-'proyecto': 'PROYECTO',
-'minuto': 'MINUTO',
-'umbrald': 'UMBRALD',
-'valor': 'VALOR',
-'medidor': 'MEDIDOR',
-}
-# conversión de tipos al leer la Excel, es útil para leer una columna
-# de números como texto
-converters={'COD':str, 'PROYECTO':str, 'MEDIDOR': str}
+db = 'ipa'
+schema = 'ipas'
+table = 'ipa1'
+path = r'H:\igme\tmp'
+fi = r'H:\igme\tmp\ipas_ipa1.xlsx'
+sheet_name = 'ipa1'
+
+
+# columns a utilizar: si None todas; otro ej. "A-B, D-E" hasta la E sin la C
+usecols = 'A:AL'
+# columnas del fichero Excel a convertir al tipo:necesario en codigos numericos
+# en columns con sólo dígitos
+converters={'cod': str, 'acuifero': str}
 # columnas del fichero Excel a convertir a minúsculas
-cols_to_lowercase=('COD', 'LABORATORI')
-# columnas en excelf donde se mostrarán los valores min y max
-cols_min_max = ('FECHA',)
+cols_to_lowercase=()
 # =============================================================
 
 if __name__ == "__main__":
@@ -42,20 +30,23 @@ if __name__ == "__main__":
         from datetime import datetime
         from time import time
         import traceback
-        from upsert_ipas_calidad import Upsert_ipas_calidad as ups
+        from upserts import Upsert as ups
 
         now = datetime.now()
 
         startTime = time()
 
-        data = ups(excelf, column_names, sheet_name=sheet_name,
-                   converters=converters,
-                   lowercase=cols_to_lowercase)
-        pass01 = data.check_data_in_tables()
-        if not pass01:
-            raise ValueError('los datos no cumplen las condiciones')
-        data.print_min_max(cols_min_max)
-        data.upsert()
+        data = ups(db, schema, table, geom_name='geom')
+
+#        data.create_template(path)
+
+        data.get_converters(fi, sheet_name, path)
+
+#        pass01 = data.check_data_in_tables()
+#        if not pass01:
+#            raise ValueError('los datos no cumplen las condiciones')
+#        data.print_min_max(['AÑO', 'PMES77'])
+#        data.upsert()
 
         xtime = time() - startTime
         print(f'El script tardó {xtime:0.1f} s')
@@ -66,6 +57,8 @@ if __name__ == "__main__":
     except ImportError:
         msg = traceback.format_exc()
         print (f'ImportError exception\n{msg}')
+    except SystemExit:
+        pass
     except Exception:
         msg = traceback.format_exc()
         logging.append(f'Exception\n{msg}')
