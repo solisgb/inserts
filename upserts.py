@@ -83,7 +83,8 @@ class Upsert():
         return df
 
 
-    def get_converters(self, fi: str, sheet_name: str, path: str):
+    def get_converters(self, fi: str, sheet_name: str, path: str, 
+                       usecols: dict = None):
         """
         it reads the data in fi.sheet_name, reads the column type in
             self.table and writes the mapping between each column in self.table
@@ -95,7 +96,8 @@ class Upsert():
         """
         from os.path import join
         from os import sys
-        df = pd.read_excel(fi, sheet_name=sheet_name)
+        df = pd.read_excel(fi, sheet_name=sheet_name, engine='openpyxl',
+                           usecols=usecols)
         df_types = list(df.dtypes)
         columns = self.__table_column_get()
         column_names = [col[0] for col in columns]
@@ -230,5 +232,3 @@ class Upsert():
         self.cur.execute(s1)
         columns = [row for row in self.cur.fetchall()]
         return columns
-
-

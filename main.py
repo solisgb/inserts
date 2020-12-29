@@ -8,20 +8,17 @@ import littleLogging as logging
 
 # ===================data to complete========================
 db = 'ipa'
-schema = 'ipas'
-table = 'ipa1'
-path = r'H:\igme\tmp'
-fi = r'H:\igme\tmp\ipas_ipa1.xlsx'
+schema = 'tmp'
+table = 'ipasub'
+path = r'C:\Users\LUISSOLIS\Documents\igme\tmp'
+fi = r'C:\Users\LUISSOLIS\Documents\igme\tmp\ipas_ipa1.xlsx'
 sheet_name = 'ipa1'
-
-
 # columns a utilizar: si None todas; otro ej. "A-B, D-E" hasta la E sin la C
-usecols = 'A:AL'
+usecols = 'A:AM'
 # columnas del fichero Excel a convertir al tipo:necesario en codigos numericos
 # en columns con sólo dígitos
-converters={'cod': str, 'acuifero': str}
-# columnas del fichero Excel a convertir a minúsculas
-cols_to_lowercase=()
+converters = {"cod": str, "z": float, "acuifero": str, "masub": str, "masup": str, "cod_demar": str, "natcode": str, "codprov": str, "codmuni": str, "tipo": str, "nivelado": bool, "toponimia": str, "paraje": str, "propietario": str, "propietario1": str, "titular_tipo": str, "direc_pro": str, "tfno_pro": str, "acceso": bool, "medida": bool, "direc_cont": str, "tfno_cont": str, "prof": float, "energia": str, "bomba": str, "hp": float, "prof_fil": float, "q_ls": float, "d_mm": float, "contador": bool, "bes": int, "ch": int, "observacio": str, "proyecto": str, "fecha_act": str, "XETRS89": float, "YETRS89": float, "EPGS": int, "codificador": str }
+
 # =============================================================
 
 if __name__ == "__main__":
@@ -40,7 +37,7 @@ if __name__ == "__main__":
 
 #        data.create_template(path)
 
-        data.get_converters(fi, sheet_name, path)
+#        data.get_converters(fi, sheet_name, path, usecols)
 
 #        pass01 = data.check_data_in_tables()
 #        if not pass01:
