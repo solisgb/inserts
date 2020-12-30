@@ -8,8 +8,8 @@ import littleLogging as logging
 
 # ===================data to complete========================
 db = 'ipa'
-schema = 'tmp'
-table = 'ipasub'
+schema = 'ipas'
+table = 'ipa1'
 path = r'C:\Users\LUISSOLIS\Documents\igme\tmp'
 fi = r'C:\Users\LUISSOLIS\Documents\igme\tmp\ipas_ipa1.xlsx'
 sheet_name = 'ipa1'
@@ -38,6 +38,10 @@ if __name__ == "__main__":
 #        data.create_template(path)
 
 #        data.get_converters(fi, sheet_name, path, usecols)
+
+        cols = data.primary_key()
+        print(cols)
+
 
 #        pass01 = data.check_data_in_tables()
 #        if not pass01:

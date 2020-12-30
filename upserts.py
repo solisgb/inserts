@@ -83,7 +83,7 @@ class Upsert():
         return df
 
 
-    def get_converters(self, fi: str, sheet_name: str, path: str, 
+    def get_converters(self, fi: str, sheet_name: str, path: str,
                        usecols: dict = None):
         """
         it reads the data in fi.sheet_name, reads the column type in
@@ -230,5 +230,21 @@ class Upsert():
         ;
         """
         self.cur.execute(s1)
-        columns = [row for row in self.cur.fetchall()]
-        return columns
+        return [row for row in self.cur.fetchall()]
+
+
+    def primary_key(self):
+        """
+        it returns primary keys columns and its types
+        """
+        s1 = \
+        f"""
+        select a.attname, format_type(a.atttypid, a.atttypmod) as data_type
+        from pg_index i
+            join pg_attribute a on (a.attrelid = i.indrelid and
+                                    a.attnum = any(i.indkey))
+        where i.indrelid = '{self.schema}.{self.table}'::regclass
+            and i.indisprimary;
+        """
+        self.cur.execute(s1)
+        return [row for row in self.cur.fetchall()]
