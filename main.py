@@ -4,14 +4,20 @@ Created on Sun Nov  1 13:08:40 2020
 
 @author: solis
 """
-import littleLogging as logging
+try:
+    import littleLogging as logging
+except:
+    import sys
+    t = sys.exc_info()
+    print(f'{t[0]}\n{t[1]}')
+    sys.exit(1)
 
 # ===================data to complete========================
 db = 'ipa'
 schema = 'ipas'
 table = 'ipa1'
-path = r'C:\Users\LUISSOLIS\Documents\igme\tmp'
-fi = r'C:\Users\LUISSOLIS\Documents\igme\tmp\ipas_ipa1.xlsx'
+path = r'H:\igme\tmp'
+fi = r'H:\igme\tmp\ipas_ipa1.xlsx'
 sheet_name = 'ipa1'
 # columns a utilizar: si None todas; otro ej. "A-B, D-E" hasta la E sin la C
 usecols = 'A:AM'
@@ -54,15 +60,15 @@ if __name__ == "__main__":
 
     except ValueError:
         msg = traceback.format_exc()
-        logging.append(f'ValueError exception\n{msg}')
+        logging.append(msg)
     except ImportError:
         msg = traceback.format_exc()
-        print (f'ImportError exception\n{msg}')
+        print (msg)
     except SystemExit:
         pass
     except Exception:
         msg = traceback.format_exc()
-        logging.append(f'Exception\n{msg}')
+        logging.append(msg)
     finally:
         try:
             data.con

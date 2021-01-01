@@ -78,8 +78,9 @@ class Upsert():
         sys.exit(0)
 
 
-    def read_data(self,  fi: str, sheet_name: str, ):
-        df = pd.read_excel(fi, sheet_name=sheet_name)
+    def read_data(self,  converters: dict = None, usecols: str = None):
+        df = pd.read_excel(self.fi, sheet_name=self.sheet_name,
+                           converters=converters, usecols=usecols)
         return df
 
 
@@ -215,14 +216,18 @@ class Upsert():
         return pytypes
 
 
-    def __table_column_get(self) ->list:
+    def __table_column_get(self, data_type:bool = True) ->list:
         """
         returns a list with the name and type columns in the table to be
             upserted
         """
+        if data_type:
+            columns = 'column_name, data_type'
+        else:
+            columns = 'column_name'
         s1 = \
         f"""
-        select column_name, data_type
+        select {columns}
         from information_schema.columns
         where table_catalog='{self.db}' and table_schema ='{self.schema}'
             and table_name = '{self.table}'
@@ -248,3 +253,20 @@ class Upsert():
         """
         self.cur.execute(s1)
         return [row for row in self.cur.fetchall()]
+
+
+    def check_not_null(self, converters):
+        """
+        it returns the name of not nullable columns
+        """
+        s1 = \
+        """
+        select column_name
+        from information_schema.columns
+        where table_schema = 'ipas'
+        	and table_name   = 'ipa2'
+            and is_nullable = 'NO';
+        """
+        if self.data is not None:
+
+        col_names = self.__table_column_get(False)
