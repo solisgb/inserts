@@ -1,26 +1,42 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
-#import traceback
-#import xml.etree.ElementTree as ET
 
 from db_connection import con_get
-#import littleLogging as logging
+import littleLogging as logging
 
 
 class Upsert():
     """
-    imports the content of an excel file in a postgres table
-    you can also import the point geometries: in this case you can provide
-        to the constructor the name of the geometry column
-    the first time you import data to a table, it's advisable to run the
-        method create_file_template
-    before to run the upsert function, you must define the converters; you
-        can be help with the function get_converters; don't run the method
-        upsert before you have defined a dictionary with the converters; the
-        converter dict contains the translation between the column data type
-        in th dataframe and the column type in the postgres table; a common
-        case is when a columns of integers in the dateframe must be converted
-        to str because the type in the postgres table
+    It checks the data to be imported from an Excel file to a postgres
+    database table and when all are ok you can import then using an upsert
+    sentence
+
+    The first row in the Excel file are the exact names of the columns in
+    the table in which the data are going to be imported
+
+    You can also import the point geometries: in this case you can provide
+        to the constructor the name of the geometry column and the template
+        file substitutes geometry column name with appropiate x, y and epsg
+        names
+
+    Usually you need to provide a dict with the converters. Some columns in
+        the dataframe must have a type compatible with th postgres column
+        in the table. You can be help with by using the function
+        get_converters: the converter dict contains the translation between
+        the column data type in the dataframe and the column type in the
+        postgres table; a common case is when a columns of integers in the
+        dateframe must be converted to str because the type in the postgres
+        table
+
+    Mode of use:
+        1.- instance an Upsert object
+        2.- Create the converter dict by yourself or by using the function
+        get_converters
+        3.- If it is the case, select the columns in the Excel file to be
+        imported
+        4.- Check if the data acomplish the rules by running the function
+        check_data
+        5.- Insert or update the data in the Excel file into tle table
     """
 
     xml_org = 'upserts.xml'
@@ -36,8 +52,17 @@ class Upsert():
             db: database
             schema: schema
             table: table
-            if your table has a point geometry column you musy supply
-                the column name
+            geom: point geometry column name
+            con: connection to db
+            cur: cursor to con
+            data: dataframe object with the data to be checked and imported
+            convertes: when pandas reads an Excel file it inferes the dtype
+                of the column; in same cases you need it understand some
+                columns un a specific type, you need concerts these column
+                to the prostgers compatible type. Read the documentation in
+                pandas.DataFrame.read_excel function
+            usecols: columns in Excel file to be read. Read the documentation
+                in pandas.DataFrame.read_excel function
         """
         self.con = None
         try:
@@ -51,6 +76,9 @@ class Upsert():
             # self.data will be a DataFrame object when it be written the
             # excel file to be imported
             self.data = None
+            self.converters = None
+            self.usecols = None
+            self.notnullcols = None
         except:
             if self.con is not None:
                 self.con.close()
@@ -66,11 +94,11 @@ class Upsert():
         from os.path import join
         dst = join(path, f'{self.schema}_{self.table}_template.xlsx')
         writer = pd.ExcelWriter(dst)
-        columns = [names[0] for names in self.__table_column_get()]
+        columns = self.__table_column_get(False)
         columns = self.__replace_geom(columns)
         df = pd.DataFrame(columns=columns)
         df.to_excel(writer, sheet_name=self.table, index=False,
-                    encoding='utf-8')
+                    encoding='utf-8', engine='openpyxl')
         writer.save()
         print(f'{dst} has been written\n'
               'examine the file and create the convertes dict '
@@ -78,9 +106,11 @@ class Upsert():
         sys.exit(0)
 
 
-    def read_data(self,  converters: dict = None, usecols: str = None):
-        df = pd.read_excel(self.fi, sheet_name=self.sheet_name,
-                           converters=converters, usecols=usecols)
+    def read_data(self, fi: str, sheet_name: str,
+                  converters: dict = None, usecols: str = None):
+        df = pd.read_excel(fi, sheet_name=sheet_name,
+                           converters=converters, usecols=usecols,
+                           engine='openpyxl')
         return df
 
 
@@ -238,6 +268,34 @@ class Upsert():
         return [row for row in self.cur.fetchall()]
 
 
+    def check_data(self, fi: str, sheet_name: str, converters: dict={},
+                   usecols: str = None):
+        """
+        It checks the data to be inserted. Conditions to be tested:
+            1.- not null columns: the columns is not nullable and must have
+                not null values
+            2.- foreign keys: the values in these column must join the
+                data in the foreign key table
+        """
+        if self.data is None:
+            self.data = self.read_data(fi, sheet_name, converters,
+                                       usecols)
+            self.converters = converters
+            self.usecols = usecols
+        tests = {'test not null columns': True,
+                 'foreign keys': True}
+        tests['test not null columns'] = self.__check_not_null()
+        if not tests['test not null columns']:
+            return False
+
+        tests['foreign keys'] = self.__check_foreign_keys()
+        if tests['foreign keys']:
+            print('Data can be imported')
+            return True
+        else:
+            return False
+
+
     def primary_key(self):
         """
         it returns primary keys columns and its types
@@ -255,18 +313,161 @@ class Upsert():
         return [row for row in self.cur.fetchall()]
 
 
-    def check_not_null(self, converters):
+    def __check_not_null(self) -> bool:
         """
         it returns the name of not nullable columns
         """
         s1 = \
-        """
+        f"""
         select column_name
         from information_schema.columns
-        where table_schema = 'ipas'
-        	and table_name   = 'ipa2'
+        where table_schema = '{self.schema}'
+        	and table_name   = '{self.table}'
             and is_nullable = 'NO';
         """
-        if self.data is not None:
+        df_columns = list(self.data.columns)
+        self.cur.execute(s1)
+        notnullcols = [col[0] for col in self.cur.fetchall()]
+        logging.append('\ncheck column with not null restriction')
+        n1 = n2 = 0
+        for col in notnullcols:
+            if col in df_columns:
+                m = self.data[f'{col}'].isnull().sum()
+                logging.append(f'{col} is present and has {m:n} null values')
+                if m > 0:
+                    n2 += 1
+            else:
+                n1 += 1
+                logging.append(f'{col} is not present')
+        if n1 > 0:
+            logging.append(f'{n1:n} columns must be present but are not')
+        if n2 > 0:
+            logging.append(f'{n2:n} columns are present but have null ' +\
+                           'values and they can not')
+        if n1+ n2 > 0:
+            return False
+        self.notnullcols = notnullcols.copy()
+        return True
 
-        col_names = self.__table_column_get(False)
+
+    def __check_foreign_keys(self) -> bool:
+        """
+        checks if data in columns are in foreign table
+        """
+        s1 = \
+        f"""
+        select
+        	tc.constraint_name
+        from
+        	information_schema.table_constraints as tc
+        join information_schema.key_column_usage as kcu on
+        	tc.constraint_name = kcu.constraint_name
+        	and tc.table_schema = kcu.table_schema
+        join information_schema.constraint_column_usage as ccu on
+        	ccu.constraint_name = tc.constraint_name
+        	and ccu.table_schema = tc.table_schema
+        where
+        	tc.constraint_type = 'FOREIGN KEY'
+        	and tc.table_schema = '{self.schema}'
+        	and tc.table_name = '{self.table}';
+        """
+        s2 = \
+            """
+            select
+                kcu.column_name,
+            	ccu.table_schema as foreign_table_schema,
+            	ccu.table_name as foreign_table_name,
+            	ccu.column_name as foreign_column_name
+            from
+            	information_schema.table_constraints as tc
+            join information_schema.key_column_usage as kcu on
+            	tc.constraint_name = kcu.constraint_name
+            	and tc.table_schema = kcu.table_schema
+            join information_schema.constraint_column_usage as ccu on
+            	ccu.constraint_name = tc.constraint_name
+            	and ccu.table_schema = tc.table_schema
+            where
+            	tc.constraint_type = 'FOREIGN KEY'
+            	and tc.table_schema = %s
+            	and tc.table_name = %s
+            	and tc.constraint_name = %s;
+            """
+
+        logging.append('\nCheck foreign keys data')
+        self.cur.execute(s1)
+        constraint_names = [cname[0] for cname in self.cur.fetchall()]
+        nc_names = 0
+        if constraint_names:
+            logging.append(f'{len(constraint_names):n} primary keys ' +\
+                           'to examine')
+            dfcolumns = list(self.data.columns)
+            for cname in constraint_names:
+                logging.append(f'Constrain name {cname}')
+                self.cur.execute(s2, (self.schema, self.table, cname))
+                fkrows = [row for row in self.cur.fetchall()]
+                for i, row in enumerate(fkrows):
+                    if i == 0:
+                        columns = [row[0]]
+                        ftschema = row[1]
+                        fttable = row[2]
+                        ftcolumns = [row[3]]
+                    else:
+                        columns.append(row[0])
+                        ftcolumns.append(row[3])
+                n = 0
+                for column in columns:
+                    if column not in dfcolumns:
+                        n += 1
+                        logging.append(f'The column {column} is not in ' +\
+                                       'data columns')
+                if n > 0:
+                    nc_names += 1
+                    logging.append(f'Constrain {cname} has not ' +\
+                                   'required columns')
+                    continue
+                fk_table = f'{ftschema}.{fttable}'
+                ner = self.__check_data_in_fktable(columns, fk_table,
+                                                   ftcolumns)
+                logging.append(f'Errors en {ner:n} rows')
+            if nc_names > 0:
+                return False
+            else:
+                return True
+        else:
+            logging.append('The table has not foreign keys')
+            return True
+
+
+    def __check_data_in_fktable(self, data_col_names: [],
+                                    fk_table: str, fk_col_names: []) -> int:
+        """
+        Checks if data file columns are in a foreign key table
+        """
+        cols_in_select = ', '.join(fk_col_names)
+        cols_in_where = [f'{col}=%s' for col in fk_col_names]
+        cols_in_where = ', '.join(cols_in_where)
+        s1 = \
+            f"""
+            select {cols_in_select}
+            from {fk_table}
+            where {cols_in_where}
+            """
+        self.data = self.data.where(pd.notnull(self.data), None)
+        columns = [f"{col}" for col in data_col_names]
+        n = 0
+        for row in self.data.loc[:, columns].itertuples():
+            if None in row:
+                logging.append(f'la fila {row[0]:n} tiene valores nulos' +\
+                               'en las columnas referenciadas', False)
+                continue
+            self.cur.execute(s1, row[1:])
+            rows = [row for row in self.cur.fetchall()]
+            if not rows:
+                n += 1
+                logging.append(f'la fila {row[0]:n} no tiene un valor ' +\
+                               f'válido en la tabla {fk_table}', False)
+        return n
+
+
+
+
