@@ -284,28 +284,42 @@ class Upsert():
             self.usecols = usecols
         tests = {'test not null columns': True,
                  'foreign keys': True}
-        tests['test not null columns'] = self.__check_not_null()
-        if not tests['test not null columns']:
-            return False
 
+        # test 1
+        tests['test not null columns'] = self.__check_not_null()
+
+        # test 2
         tests['foreign keys'] = self.__check_foreign_keys()
-        if tests['foreign keys']:
-            print('Data can be imported')
+
+        ner = 0
+        for k, v in tests.items():
+            print(k, v, sep=': ')
+            if not v:
+                ner += 1
+
+        if ner == 0:
+            logging.append('Data can be imported')
             return True
         else:
+            logging.append('Data must be corrected')
             return False
 
 
-    def primary_key(self):
+    def __primary_key(self, column_type:bool = True):
         """
         it returns primary keys columns and its types
         """
+        if column_type:
+            columns = 'a.attname, format_type(a.atttypid, a.atttypmod) ' +\
+                'as data_type'
+        else:
+            columns = 'a.attname'
         s1 = \
         f"""
-        select a.attname, format_type(a.atttypid, a.atttypmod) as data_type
+        select {columns}
         from pg_index i
-            join pg_attribute a on (a.attrelid = i.indrelid and
-                                    a.attnum = any(i.indkey))
+        join pg_attribute a on (a.attrelid = i.indrelid and
+            a.attnum = any(i.indkey))
         where i.indrelid = '{self.schema}.{self.table}'::regclass
             and i.indisprimary;
         """
@@ -352,7 +366,11 @@ class Upsert():
 
     def __check_foreign_keys(self) -> bool:
         """
-        checks if data in columns are in foreign table
+        It checks the data in columns related to foreign keys.
+        It checks for each foreign key:
+            If the foreign key columns are in data file
+            If data in foreign keys columns have not null values
+            If data in foreign keys columns have valid values
         """
         s1 = \
         f"""
@@ -426,13 +444,15 @@ class Upsert():
                                    'required columns')
                     continue
                 fk_table = f'{ftschema}.{fttable}'
-                ner = self.__check_data_in_fktable(columns, fk_table,
-                                                   ftcolumns)
-                logging.append(f'Errors en {ner:n} rows')
+                ndata_er = self.__check_data_in_fktable(columns, fk_table,
+                                                        ftcolumns)
             if nc_names > 0:
                 return False
             else:
-                return True
+                if ndata_er > 0:
+                    return False
+                else:
+                    return True
         else:
             logging.append('The table has not foreign keys')
             return True
@@ -442,6 +462,9 @@ class Upsert():
                                     fk_table: str, fk_col_names: []) -> int:
         """
         Checks if data file columns are in a foreign key table
+        It cheks:
+            if columns in foreign keys have not null values
+            if columns in foreign keys have valid values
         """
         cols_in_select = ', '.join(fk_col_names)
         cols_in_where = [f'{col}=%s' for col in fk_col_names]
@@ -454,20 +477,58 @@ class Upsert():
             """
         self.data = self.data.where(pd.notnull(self.data), None)
         columns = [f"{col}" for col in data_col_names]
-        n = 0
+        n1 = n2 = 0
         for row in self.data.loc[:, columns].itertuples():
             if None in row:
-                logging.append(f'la fila {row[0]:n} tiene valores nulos' +\
-                               'en las columnas referenciadas', False)
+                n1 += 1
+                logging.append(f'Row {row[0]:n} has null values' +\
+                               'in referenced columns', False)
                 continue
             self.cur.execute(s1, row[1:])
             rows = [row for row in self.cur.fetchall()]
             if not rows:
-                n += 1
-                logging.append(f'la fila {row[0]:n} no tiene un valor ' +\
-                               f'válido en la tabla {fk_table}', False)
-        return n
+                n2 += 1
+                logging.append(f'Row {row[0]:n} has invalid values ' +\
+                               f'in the table {fk_table}', False)
+        if n1 > 0:
+            logging.append(f'{n1:n} rows have null values in columns ', +\
+                           f'{cols_in_select}')
+        if n2 > 0:
+            logging.append(f'{n2:n} rows have invalid values in columns ' +\
+                           f'{cols_in_select}')
+        return n2
 
+
+    def __count_rows_2_insert_update(self, data_col_names: [],
+                                     fk_table: str, fk_col_names: []) -> int:
+        """
+        Checks if data file columns are in a foreign key table
+        """
+        pk_columns = self.__primary_key(False)
+        cols_in_select = ', '.join(pk_columns)
+        cols_in_where = [f'{col}=%s' for col in pk_columns]
+        cols_in_where = ', '.join(cols_in_where)
+        s1 = \
+            f"""
+            select {cols_in_select}
+            from {fk_table}
+            where {cols_in_where}
+            """
+        data = self.data.where(pd.notnull(self.data), None)
+        columns = [f"{col}" for col in pk_columns]
+        ner, n2insert, n2update = 0
+        for row in data.loc[:, columns].itertuples():
+            if None in row:
+                logging.append(f'la fila {row[0]:n} tiene valores nulos' +\
+                               'en la clav primaria', False)
+                ner += 1
+                continue
+            self.cur.execute(s1, row[1:])
+            rows = [row for row in self.cur.fetchone()]
+            if not rows:
+                n2insert += 1
+                logging.append(f'la fila {row[0]:n} se insertará', False)
+        return ner
 
 
 
