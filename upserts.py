@@ -8,27 +8,27 @@ import littleLogging as logging
 class Upsert():
     """
     It checks the data to be imported from an Excel file to a postgres
-    database table and when all are ok you can import then using an upsert
-    sentence
+    database table and when all are ok you can import then using the upsert
+    method
 
     The first row in the Excel file are the exact names of the columns in
     the table in which the data are going to be imported
 
-    You can also import the point geometries: in this case you can provide
+    You can also upsert point geometries: in this case you can provide
         to the constructor the name of the geometry column and the template
         file substitutes geometry column name with appropiate x, y and epsg
-        names
+        columns
 
     Usually you need to provide a dict with the converters. Some columns in
-        the dataframe must have a type compatible with th postgres column
+        the dataframe must have a type compatible with the postgres column
         in the table. You can be help with by using the function
         get_converters: the converter dict contains the translation between
         the column data type in the dataframe and the column type in the
         postgres table; a common case is when a columns of integers in the
         dateframe must be converted to str because the type in the postgres
-        table
+        table is varchar
 
-    Mode of use:
+    How to use it:
         1.- instance an Upsert object
         2.- Create the converter dict by yourself or by using the function
         get_converters
@@ -36,7 +36,7 @@ class Upsert():
         imported
         4.- Check if the data acomplish the rules by running the function
         check_data
-        5.- Insert or update the data in the Excel file into tle table
+        5.- Insert or update the data in the Excel file into the table
     """
 
     xml_org = 'upserts.xml'
@@ -51,8 +51,14 @@ class Upsert():
         args:
             db: database
             schema: schema
-            table: table
-            geom: point geometry column name
+            table: table in which data will be upserted
+            geom_name: point geometry column name, optional arg; if the data
+                have a point geometry column the upsert method constructs
+                the geometry with columns in point_geometry_columns list
+                which are te arguments of thr postgis function st_setsrid &
+                st_makepoint
+        attributes:
+            db, schema, table and geom are described yet
             con: connection to db
             cur: cursor to con
             data: dataframe object with the data to be checked and imported
@@ -63,6 +69,14 @@ class Upsert():
                 pandas.DataFrame.read_excel function
             usecols: columns in Excel file to be read. Read the documentation
                 in pandas.DataFrame.read_excel function
+            notnullcols: if False some columns have null values but they
+                could not; the value is assigned in the method check_data
+            foreignKeys: if False some columns have values that are no
+                present as primary key in the foreign table; the value is
+                assigned in the method check_data
+
+            to upsert the data both attributes -notnullcols and foreignKeys-
+                must be True
         """
         self.con = None
         try:
@@ -78,7 +92,8 @@ class Upsert():
             self.data = None
             self.converters = None
             self.usecols = None
-            self.notnullcols = None
+            self.notnullcols = False
+            self.foreignKeys = False
         except:
             if self.con is not None:
                 self.con.close()
@@ -282,22 +297,22 @@ class Upsert():
                                        usecols)
             self.converters = converters
             self.usecols = usecols
-        tests = {'test not null columns': True,
-                 'foreign keys': True}
+        tests = {'test not null columns': False,
+                 'foreign keys': False}
 
         # test 1
-        tests['test not null columns'] = self.__check_not_null()
+        self.notnullcols = tests['test not null columns'] = \
+            self.__check_not_null()
 
         # test 2
-        tests['foreign keys'] = self.__check_foreign_keys()
+        self.foreignKeys = tests['foreign keys'] = \
+            self.__check_foreign_keys()
 
-        ner = 0
+        logging.append('\nResumen de los tests realizados')
         for k, v in tests.items():
             print(k, v, sep=': ')
-            if not v:
-                ner += 1
 
-        if ner == 0:
+        if self.notnullcols and self.foreignKeys:
             logging.append('Data can be imported')
             return True
         else:
@@ -491,7 +506,7 @@ class Upsert():
                 logging.append(f'Row {row[0]:n} has invalid values ' +\
                                f'in the table {fk_table}', False)
         if n1 > 0:
-            logging.append(f'{n1:n} rows have null values in columns ', +\
+            logging.append(f'{n1:n} rows have null values in columns ' +\
                            f'{cols_in_select}')
         if n2 > 0:
             logging.append(f'{n2:n} rows have invalid values in columns ' +\
@@ -530,5 +545,42 @@ class Upsert():
                 logging.append(f'la fila {row[0]:n} se insertará', False)
         return ner
 
+
+    def upsert(self):
+        """
+        it does a upsert row by row and identifies which rows will be
+        inserted and which will be updated
+        """
+        if self.notnullcols and self.foreignKeys:
+            pass
+        else:
+            logging.append('upsert could not be runned because notnullcols' +\
+                           ' and/or foreignKeys tests have failed')
+            return
+        pk_columns = self.__primary_key(False)
+        cols_in_s1 = ', '.join(pk_columns)
+        cols_in_where_s1 = [f'{col}=%s' for col in pk_columns]
+        cols_in_where_s1 = ', '.join(cols_in_where_s1)
+        s1 = \
+            f"""
+            select {cols_in_s1}
+            from {self.schema}.{self.table}
+            where {cols_in_where_s1}
+            """
+        data = self.data.where(pd.notnull(self.data), None)
+        columns = list(data.columns)
+        # columns_s1= [f"{col}" for col in pk_columns]
+        ner, n2insert, n2update = 0
+        for row in data.loc[:, columns].itertuples():
+            #TODO: function to extract pk columns from columns
+            #TODO: if geom column constructor
+            self.cur.execute(s1, row[1:])
+            rows_s1 = self.cur.fetchone()
+            if rows_s1:
+                # row to update
+                n2update += 1
+            else:
+                # row to insert
+                n2insert += 1
 
 
