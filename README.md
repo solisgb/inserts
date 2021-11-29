@@ -1,3 +1,3 @@
 # inserts
 
-some modules to insert very specific data in a db
+some modules to insert specific data in a db
