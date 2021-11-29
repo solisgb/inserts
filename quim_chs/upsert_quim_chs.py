@@ -5,10 +5,11 @@ Created on Sat Nov 16 21:00:03 2019
 insert data in table ipa2 from a csv file
 """
 
-import littleLogging as logging
 from os.path import join
 import sqlite3
 from sqlite3 import Error
+import traceback
+import littleLogging as logging
 
 column_names = ('Estación', 'FechaToma', 'Param Cod', 'Param Nom',
                 'Unidades', 'Valor', 'X_ETRS89', 'Y_ETRS89', 'Cod Masa',
@@ -102,85 +103,84 @@ def insert(csvfiles: list, csvpath: str, db: str,
     """
 
     def to_float(col: str, file: str, line: int, col_name: str,
-                 required: bool = True):
+                 exception: bool, required: bool = True):
         if col.lower() == 'null':
             msg = f'file {file}, line {i:n} {col_name} is null'
-            if required:
-                raise ValueError(msg)
             logging.append(msg)
+            if required and exception:
+                raise ValueError(msg)
             return ''
         else:
-            return float(col[j])
+            return float(col.replace(',', '.'))
 
 
     def to_str(col: str, file: str, line: int, col_name: str,
-               required: bool = True):
+               exception: bool, required: bool = True):
         if col.lower() == 'null':
             msg = f'file {file}, line {i:n} {col_name} is null'
-            if required:
-                raise ValueError(msg)
             logging.append(msg)
+            if required and exception:
+                raise ValueError(msg)
             return ''
         else:
-            return col[j]
+            return col
 
     try:
+        connected = False
         con = sqlite3.connect(db)
+        connected = True
         cur = con.cursor()
         for file in csvfiles:
             print(file)
-            with open(join(csvpath, file), 'r', encoding='Latin-1') as fi:
+            with open(join(csvpath, file), 'r', encoding='utf-8') as fi:
                 for i, row in enumerate(fi):
                     if i == 0:
                         continue
-                col = row.split(sep)
-                for j in range(col):
-                    if j == 0:
-                        col[j] = to_str(col[j], file, i, 'fid analisis')
-                    elif j == 1:
-                        col[j] = to_str(col[j], file, i, 'fecha')
-                    elif j == 2:
-                        col[j] = to_str(col[j], file, i, 'fid param')
-                    elif j == 3:
-                        col[j] = to_str(col[j], file, i, 'param')
-                    elif j == 4:
-                        col[j] = to_str(col[j], file, i, 'uds', False)
-                    elif j == 5:
-                        col[j] = to_str(col[j], file, i, 'valor')
-                    elif j == 6:
-                        col[j] = to_float(col[j], file, i, 'xetrs89', False)
-                    elif j == 7:
-                        col[j] = to_float(col[j], file, i, 'yetrs89', False)
-                    elif j == 8:
-                        col[j] = to_str(col[j], file, i, 'id_mas')
-                    elif j == 9:
-                        col[j] = to_str(col[j], file, i, 'mas name', False)
-                    elif j == 10:
-                        col[j] = to_str(col[j], file, i, 'tm', False)
-                    elif j == 11:
-                        col[j] = to_str(col[j], file, i, 'prov', False)
-                    elif j == 12:
-                        col[j] = to_str(col[j], file, i, 'id_uh', False)
-                    elif j == 13:
-                        col[j] = to_str(col[j], file, i, 'uh name', False)
-                    elif j == 14:
-                        col[j] = to_str(col[j], file, i, 'acu', False)
-                    elif j == 15:
-                        col[j] = to_float(col[j], file, i, 'prof', False)
+                    col = row.strip().split(sep)
+                    for j in range(len(col)):
+                        col[j] = col[j].replace(';', ':')
+                        col[j] = col[j].replace('"', '')
+                        if j == 0:
+                            col[j] = to_str(col[j], file, i, 'fid analisis', exception)
+                        elif j == 1:
+                            col[j] = to_str(col[j], file, i, 'fecha', exception)
+                        elif j == 2:
+                            col[j] = to_str(col[j], file, i, 'fid param', exception)
+                        elif j == 3:
+                            col[j] = to_str(col[j], file, i, 'param', exception)
+                        elif j == 4:
+                            col[j] = to_str(col[j], file, i, 'uds', exception, False)
+                        elif j == 5:
+                            col[j] = to_float(col[j], file, i, 'valor', exception)
+                        elif j == 6:
+                            col[j] = to_float(col[j], file, i, 'xetrs89', exception, False)
+                        elif j == 7:
+                            col[j] = to_float(col[j], file, i, 'yetrs89', exception, False)
+                        elif j == 8:
+                            col[j] = to_str(col[j], file, i, 'id_mas', exception, False)
+                        elif j == 9:
+                            col[j] = to_str(col[j], file, i, 'mas name', exception, False)
+                        elif j == 10:
+                            col[j] = to_str(col[j], file, i, 'tm', exception, False)
+                        elif j == 11:
+                            col[j] = to_str(col[j], file, i, 'prov', exception, False)
+                        elif j == 12:
+                            col[j] = to_str(col[j], file, i, 'id_uh', exception, False)
+                        elif j == 13:
+                            col[j] = to_str(col[j], file, i, 'uh name', exception, False)
+                        elif j == 14:
+                            col[j] = to_str(col[j], file, i, 'acu', exception, False)
+                        elif j == 15:
+                            col[j] = to_float(col[j], file, i, 'prof', exception, False)
+                    if not insert_update:
+                        continue
 
     except Error:
         raise ValueError(Error)
+    except ValueError:
+        msg = traceback.format_exc()
+        logging.append(f'ValueError exception\n{msg}')
     finally:
-        con.close()
-
-
-
-def __check_column_names(row: str, file: str):
-    cols = row.split(';')
-    for col1, col2 in zip(cols, column_names):
-        if col1 != col2:
-            raise ValueError(f'File {file}\nLa columna {col1} no está ' +
-                             'definida o está en distinto orden')
-
-
+        if connected:
+            con.close()
 
