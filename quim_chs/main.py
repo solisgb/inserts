@@ -27,7 +27,7 @@ if __name__ == "__main__":
         create_tables(dbname)
 
         insert(csvfiles, csvpath, dbname, update_puntos = False,
-               exception = False, insert_update = False)
+               exception = False, insert_update = True)
 
         end = time()
         print('ellapsed time ', end-start)
