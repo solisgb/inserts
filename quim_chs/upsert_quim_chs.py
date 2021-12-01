@@ -7,9 +7,11 @@ insert data in table ipa2 from a csv file
 
 import csv
 from os.path import join
+import numpy as np
 import sqlite3
 from sqlite3 import Error
 import traceback
+
 import littleLogging as logging
 
 column_names = ('Estación', 'FechaToma', 'Param Cod', 'Param Nom',
@@ -283,6 +285,7 @@ def insert(csvfiles: list, csvpath: str, db: str,
             con.commit()
             con.close()
 
+
 def ooutliers(dbname: str):
     """
     IQR diferencia entre el tercer y el primer cuartil
@@ -306,28 +309,45 @@ def ooutliers(dbname: str):
 
     select_puntos = """
     select fid
-    from analisis
-    group by fid
+    from puntos
     order by fid;
     """
 
     select_params = """
-    select *
+    select fid
     from param
     order by fid
     ;
     """
 
-    select analisis = """
+    select_analisis = """
     select valor
     from analisis
-    where param = ?
+    where fid=? and param = ?
     order by valor;
     """
 
     try:
         con = sqlite3.connect(dbname)
         cur = con.cursor()
+
+        cur.execute(select_params)
+        params = cur.fetchall()
+
+        cur.execute(select_puntos)
+        puntos = cur.fetchall()
+
+        perc = np.empty(2, np.float32)
+
+        for punto1 in puntos:
+            print(punto1)
+            for param1 in params:
+                cur.execute(select_analisis, (punto1, param1))
+                values = cur.fetchall()
+                values = np.asarray(values, dtype=np.float32)
+                perc = np.percentile(values, [25, 75])
+
+
 
 
     except Error:

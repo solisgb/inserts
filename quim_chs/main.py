@@ -20,14 +20,16 @@ if __name__ == "__main__":
 
         import traceback
         from time import time
-        from upsert_quim_chs import create_tables, insert
+        from upsert_quim_chs import create_tables, insert, ooutliers
 
         start = time()
 
-        create_tables(dbname)
+        # create_tables(dbname)
 
-        insert(csvfiles, csvpath, dbname, update_puntos = False,
-               exception = False, insert_update = True)
+        # insert(csvfiles, csvpath, dbname, update_puntos = False,
+        #        exception = False, insert_update = True)
+
+        ooutliers(dbname)
 
         end = time()
         print('ellapsed time ', end-start)
