@@ -24,11 +24,9 @@ def create_tables(dbname: str):
         xetrs89 real,
         yetrs89 real,
         id_mas text,
-        mas text,
         tm text,
         prov text,
         id_uh text,
-        uh text,
         acu text,
         prof real
     )
@@ -44,24 +42,29 @@ def create_tables(dbname: str):
     )
     """
     com3 = """
-    create table if not exists param_q(
+    create table if not exists param(
         fid text primary key,
-        param text
+        name text
     )
     """
     com4 = """
-    create table if not exists masub_q(
+    create table if not exists masub(
         fid text primary key,
-        masub text
+        name text
+    )
+    """
+    com5 = """
+    create table if not exists uh(
+        fid text primary key,
+        name text
     )
     """
     try:
         con = sqlite3.connect(dbname)
         cur = con.cursor()
-        cur.execute(com1)
-        cur.execute(com2)
-        cur.execute(com3)
-        cur.execute(com4)
+        commands = (com1, com2, com3, com4, com5)
+        for command in commands:
+            cur.execute(command)
 
     except Error:
         raise ValueError(Error)
@@ -104,33 +107,54 @@ def insert(csvfiles: list, csvpath: str, db: str,
     """
 
     insert_puntos = """
-    insert into puntos(fid, xetrs89, yetrs89, id_mas, mas, tm, prov,
-        id_uh, uh, acu, prof)
-    values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    insert into puntos(fid, xetrs89, yetrs89, id_mas, tm, prov,
+        id_uh, acu, prof)
+    values (?, ?, ?, ?, ?, ?, ?, ?, ?)
     """
 
     select_masub = """
     select *
-    from masub_q
+    from masub
     where fid = ?
     """
 
     insert_masub = """
-    insert into masub_q(fid, masub)
+    insert into masub(fid, name)
     values (?, ?)
     """
 
     select_param = """
     select *
-    from param_q
+    from param
     where fid = ?
     """
 
     insert_param = """
-    insert into param_q(fid, param)
+    insert into param(fid, name)
     values (?, ?)
     """
 
+    select_uh = """
+    select *
+    from uh
+    where fid = ?
+    """
+
+    insert_uh = """
+    insert into uh(fid, name)
+    values (?, ?)
+    """
+
+    select_analisis = """
+    select *
+    from analisis
+    where fid = ? and fecha = ? and param = ?
+    """
+
+    insert_analisis = """
+    insert into analisis(fid, fecha, param, valor, uds)
+    values (?, ?, ?, ?, ?)
+    """
 
     def to_float(col: str, file: str, line: int, col_name: str,
                  exception: bool, cols_with_null_values: list,
@@ -198,11 +222,11 @@ def insert(csvfiles: list, csvpath: str, db: str,
                         elif j == 5:
                             col[j] = to_float(col[j], file, i, 'valor', exception, cols_with_null_values)
                         elif j == 6:
-                            col[j] = to_float(col[j], file, i, 'xetrs89', exception, cols_with_null_values, False)
+                            col[j] = to_float(col[j], file, i, 'xetrs89', exception, cols_with_null_values)
                         elif j == 7:
-                            col[j] = to_float(col[j], file, i, 'yetrs89', exception, cols_with_null_values, False)
+                            col[j] = to_float(col[j], file, i, 'yetrs89', exception, cols_with_null_values)
                         elif j == 8:
-                            col[j] = to_str(col[j], file, i, 'id_mas', exception, cols_with_null_values, False)
+                            col[j] = to_str(col[j], file, i, 'id_mas', exception, cols_with_null_values)
                         elif j == 9:
                             col[j] = to_str(col[j], file, i, 'mas name', exception, cols_with_null_values, False)
                         elif j == 10:
@@ -210,7 +234,7 @@ def insert(csvfiles: list, csvpath: str, db: str,
                         elif j == 11:
                             col[j] = to_str(col[j], file, i, 'prov', exception, cols_with_null_values, False)
                         elif j == 12:
-                            col[j] = to_str(col[j], file, i, 'id_uh', exception, cols_with_null_values, False)
+                            col[j] = to_str(col[j], file, i, 'id_uh', exception, cols_with_null_values)
                         elif j == 13:
                             col[j] = to_str(col[j], file, i, 'uh name', exception, cols_with_null_values, False)
                         elif j == 14:
@@ -224,13 +248,25 @@ def insert(csvfiles: list, csvpath: str, db: str,
                     cur.execute(select_puntos, (col[0],))
                     if cur.fetchone() is None:
                         cur.execute(insert_puntos, (col[0], col[6], col[7],
-                                                    col[8], col[9], col[10],
-                                                    col[11], col[12], col[13],
-                                                    col[14], col[15] ))
+                                                    col[8], col[10], col[11],
+                                                    col[12], col[14], col[15]))
 
                     cur.execute(select_masub, (col[8],))
                     if cur.fetchone() is None:
                         cur.execute(insert_masub, (col[8], col[9]))
+
+                    cur.execute(select_param, (col[2],))
+                    if cur.fetchone() is None:
+                        cur.execute(insert_param, (col[2], col[3]))
+
+                    cur.execute(select_uh, (col[12],))
+                    if cur.fetchone() is None:
+                        cur.execute(insert_uh, (col[12], col[13]))
+
+                    cur.execute(select_analisis, (col[0], col[1], col[2]))
+                    if cur.fetchone() is None:
+                       cur.execute(insert_analisis, (col[0], col[1], col[2],
+                                                     col[5], col[4]))
 
         print('\ncols with null values')
         print('column, null values number')
@@ -246,4 +282,56 @@ def insert(csvfiles: list, csvpath: str, db: str,
         if connected:
             con.commit()
             con.close()
+
+def ooutliers(dbname: str):
+    """
+    IQR diferencia entre el tercer y el primer cuartil
+    [(Q1-1.5 IQR), (Q3+1.5 IQR)]
+
+    Parameters
+    ----------
+    dbname : str
+        DESCRIPTION.
+
+    Raises
+    ------
+    ValueError
+        DESCRIPTION.
+
+    Returns
+    -------
+    None.
+
+    """
+
+    select_puntos = """
+    select fid
+    from analisis
+    group by fid
+    order by fid;
+    """
+
+    select_params = """
+    select *
+    from param
+    order by fid
+    ;
+    """
+
+    select analisis = """
+    select valor
+    from analisis
+    where param = ?
+    order by valor;
+    """
+
+    try:
+        con = sqlite3.connect(dbname)
+        cur = con.cursor()
+
+
+    except Error:
+        raise ValueError(Error)
+    finally:
+        con.close()
 

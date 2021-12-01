@@ -43,3 +43,4 @@ if __name__ == "__main__":
             logging.append(f'Exception\n{msg}')
     finally:
         print('\nFin')
+
