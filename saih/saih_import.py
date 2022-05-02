@@ -58,7 +58,7 @@ class Saih_import():
             logging.append(msg)
             raise ValueError(msg)
 
-        self.file_names = self.__file_ames_get(path, pattern)
+        self.file_names = self.__file_names_get(path, pattern)
 
         self.path = path
         self.pattern = join(path, pattern)
@@ -94,10 +94,10 @@ class Saih_import():
 
 
     @staticmethod
-    def __file_ames_get(path, pattern):
+    def __file_names_get(path, pattern):
         file_names = [name for name in glob.glob(join(path, pattern))]
         if not file_names:
-            msg = f'No files in {join(self.path, self.pattern)}'
+            msg = f'No files in {join(path, pattern)}'
             logging.append(msg)
             raise ValueError(msg)
         return file_names
@@ -146,7 +146,7 @@ class Saih_import():
             raise ValueError(msg)
 
 
-    def __ask_continue(self):
+    def __ask_continue(self, upsert):
         logging.append(f'Files to import: {join(self.path, self.pattern)}')
         logging.append(f'In table: {self.table}')
         logging.append(f'Upsert: {upsert}')
@@ -178,7 +178,7 @@ class Saih_import():
         None.
 
         """
-        if not self.__ask_continue():
+        if not self.__ask_continue(upsert):
             return
 
         try:
@@ -209,6 +209,9 @@ class Saih_import():
                         except ValueError:
                             msg = f'{fi}, line {line:d} "{row[1]}" is not a number'
                             logging.append(msg, False)
+                        except Exception:
+                            msg = traceback.format_exc()
+                            logging.append(f'Exception\n{msg}')
 
             con.commit()
             nr1 = self.__count_rows(cur)
@@ -217,7 +220,8 @@ class Saih_import():
             logging.append(f'Rows updated: {n-m:d}')
 
         except ValueError:
-            pass
+            msg = traceback.format_exc()
+            logging.append(f'Exception\n{msg}')
         except Exception:
             msg = traceback.format_exc()
             logging.append(f'Exception\n{msg}')

@@ -6,8 +6,13 @@ Created on Sun May  1 11:46:02 2022
 """
 import littleLogging as logging
 
+# ============ parameter =============
 path2files = r'H:\LSGB\data2db\saih\q01_hora'
 table = 'saih.tsh'
+pkey = 'tsh_pkey'
+tstep = 'hour'
+# =====================================
+
 
 if __name__ == "__main__":
 
@@ -21,7 +26,7 @@ if __name__ == "__main__":
 
         startTime = time()
 
-        saih = si.Saih_import(path2files, table=table)
+        saih = si.Saih_import(path2files, table, pkey, tstep)
         saih.upsert_data_from_csv_files()
 
         xtime = time() - startTime
