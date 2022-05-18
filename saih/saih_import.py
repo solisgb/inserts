@@ -20,6 +20,7 @@ csv coo datos de diferente discriminación temporal: diarios, horarios
 import csv
 from datetime import datetime, date
 import glob
+from pathlib import Path
 import psycopg2
 from os.path import join
 import traceback
@@ -80,9 +81,9 @@ class Saih_import():
 
     @staticmethod
     def __connect():
-        user = 'postgres'  # input('User: ')
+        user = input('User: ')
         passw = input('Password: ')
-        db = 'ipa'  # input('DB: ')
+        db = input('DB: ')
         con = psycopg2.connect(database=db, user=user, password=passw)
         return con
 
@@ -129,7 +130,7 @@ class Saih_import():
         """
         dt = datetime.strptime(strdate, '%Y-%m-%d %H:%M:%S')
         if self.step == 'day':
-            if dt.hour > 0 or dt.minute > 0 or dt.secod > 0:
+            if dt.hour > 0 or dt.minute > 0 or dt.second > 0:
                 msg = f'Time step must be days in {fi}, line {line}'
                 logging.append(msg)
                 raise ValueError(msg)
@@ -158,7 +159,7 @@ class Saih_import():
             return True
 
 
-    def upsert_data_from_csv_files(self, upsert=True):
+    def upsert_data_from_csv_files(self, upsert=True, file_encoding='utf8'):
         """
         Inserts or upserts data in csv files
 
@@ -167,11 +168,12 @@ class Saih_import():
         upsert : bool, optional
             If False inserts only new data; is True update values too.
             The default is True.
-
+        file_encoding: str, optional
+            File encoding
         Raises
         ------
         ValueError
-            Any exception
+        Any exception
 
         Returns
         -------
@@ -188,13 +190,15 @@ class Saih_import():
             n = 0
             nr0 = self.__count_rows(cur)
             for fi in self.file_names:
-                with open(fi) as csv_file:
+                with open(fi, encoding=file_encoding) as csv_file:
+                    line = -1
                     csv_reader = csv.reader(csv_file, delimiter=',')
                     for line, row in enumerate(csv_reader):
                         if line == 0:
                             id1 = row[1][0:5].lower()
                             var = row[1][5:8].lower()
-                            print(id1, var)
+                            fi_name = Path(fi).name
+                            print(fi_name, id1, var)
                             continue
 
                         d = self.__check_time_step(row[0], fi, line)
@@ -217,16 +221,24 @@ class Saih_import():
             nr1 = self.__count_rows(cur)
             m = nr1-nr0
             logging.append(f'Rows inserted: {m:d}')
-            logging.append(f'Rows updated: {n-m:d}')
+            if upsert:
+                logging.append(f'Rows updated: {n-m:d}')
+            else:
+                logging.append('Rows updated: 0')
 
         except ValueError:
             msg = traceback.format_exc()
-            logging.append(f'Exception\n{msg}')
+            if 'line' in locals():
+                msg = f'{fi}, line {line:d}\n{msg}'
+            else:
+                msg = f'{msg}'
+            logging.append(f'{msg}')
         except Exception:
             msg = traceback.format_exc()
-            logging.append(f'Exception\n{msg}')
+            logging.append(f'{msg}')
         finally:
-            con.close()
+            if 'con' in locals():
+                con.close()
 
 
 

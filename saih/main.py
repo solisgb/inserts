@@ -4,10 +4,9 @@ Created on Sun May  1 11:46:02 2022
 
 @author: solis
 """
-import littleLogging as logging
 
 # ============ parameter =============
-path2files = r'H:\LSGB\data2db\saih\q01_hora'
+path2files = r'H:\LSGB\data2db\saih\q01_dia'
 table = 'saih.tsh'
 pkey = 'tsh_pkey'
 tstep = 'hour'
@@ -20,6 +19,9 @@ if __name__ == "__main__":
         from datetime import datetime
         from time import time
         import traceback
+        import sys
+
+        import littleLogging as logging
         import saih_import as si
 
         now = datetime.now()
@@ -27,7 +29,7 @@ if __name__ == "__main__":
         startTime = time()
 
         saih = si.Saih_import(path2files, table, pkey, tstep)
-        saih.upsert_data_from_csv_files()
+        saih.upsert_data_from_csv_files(False)
 
         xtime = time() - startTime
         print(f'El script tardó {xtime:0.1f} s')
@@ -42,5 +44,6 @@ if __name__ == "__main__":
         msg = traceback.format_exc()
         logging.append(f'Exception\n{msg}')
     finally:
-        logging.dump()
+        if 'logging' in sys.modules:
+            logging.dump()
         print('\nFin')
