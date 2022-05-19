@@ -30,7 +30,6 @@ import littleLogging as logging
 
 class Saih_import():
 
-    implemented_vars = ('day', 'hour')
 
     def __init__(self, path, table, pkey, tstep, pattern='*.csv'):
         """
@@ -40,12 +39,8 @@ class Saih_import():
         ----------
         path : str
             directory of csv files.
-        table : str
-            Table name.
-        pkey : str
-            Primary key name.
         tstep : str
-            tim step: must be in implemented_vars.
+            tim step: must be in implemented_vars. Now: ('day', 'hour')
         pattern : str, optional
             The default is '*.csv'.
 
@@ -54,7 +49,13 @@ class Saih_import():
         None.
 
         """
-        if tstep not in self.implemented_vars:
+        if tstep == 'day':
+            self.table = 'saih.tsd'
+            self.pkey = 'tsd_pkey'
+        elif tstep == 'hour':
+            self.table = 'saih.tsh'
+            self.pkey = 'tsh_pkey'
+        else:
             msg = f'step {self.setp} is not valid'
             logging.append(msg)
             raise ValueError(msg)
@@ -75,8 +76,6 @@ class Saih_import():
             on conflict on constraint {pkey}
             do update set v = excluded.v
             """
-        self.table = table
-        self.step = tstep
 
 
     @staticmethod

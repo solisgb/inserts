@@ -6,9 +6,7 @@ Created on Sun May  1 11:46:02 2022
 """
 
 # ============ parameter =============
-path2files = r'H:\LSGB\data2db\saih\q01_dia'
-table = 'saih.tsh'
-pkey = 'tsh_pkey'
+path2files = r'H:\LSGB\data2db\saih\q01_hora'
 tstep = 'hour'
 # =====================================
 
@@ -28,8 +26,8 @@ if __name__ == "__main__":
 
         startTime = time()
 
-        saih = si.Saih_import(path2files, table, pkey, tstep)
-        saih.upsert_data_from_csv_files(False)
+        saih = si.Saih_import(path2files, tstep)
+        saih.upsert_data_from_csv_files()
 
         xtime = time() - startTime
         print(f'El script tardó {xtime:0.1f} s')
