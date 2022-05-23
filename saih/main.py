@@ -5,9 +5,9 @@ Created on Sun May  1 11:46:02 2022
 @author: solis
 """
 
-# ============ parameter =============
-path2files = r'H:\LSGB\data2db\saih\q01_hora'
-tstep = 'hour'
+# ============ parameters =============
+path2files = r'H:\LSGB\data2db\saih\cnp_dia'
+tstep = 'day'  # in ('day', 'hour')
 # =====================================
 
 

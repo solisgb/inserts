@@ -31,7 +31,7 @@ import littleLogging as logging
 class Saih_import():
 
 
-    def __init__(self, path, table, pkey, tstep, pattern='*.csv'):
+    def __init__(self, path, tstep, pattern='*.csv'):
         """
         Insert the data in csv files in the tsd or tsh table.
 
@@ -40,7 +40,7 @@ class Saih_import():
         path : str
             directory of csv files.
         tstep : str
-            tim step: must be in implemented_vars. Now: ('day', 'hour')
+            date-time step: must be: ('day', 'hour')
         pattern : str, optional
             The default is '*.csv'.
 
@@ -56,24 +56,25 @@ class Saih_import():
             self.table = 'saih.tsh'
             self.pkey = 'tsh_pkey'
         else:
-            msg = f'step {self.setp} is not valid'
+            msg = f'tstep {tstep} is not valid'
             logging.append(msg)
             raise ValueError(msg)
 
+        self.tstep = tstep
         self.file_names = self.__file_names_get(path, pattern)
 
         self.path = path
         self.pattern = join(path, pattern)
         self.insert = \
             f"""
-            insert into {table} values(%s, %s, %s, %s)
-            on conflict on constraint {pkey}
+            insert into {self.table} values(%s, %s, %s, %s)
+            on conflict on constraint {self.pkey}
             do nothing
             """
         self.upsert = \
             f"""
-            insert into {table} values(%s, %s, %s, %s)
-            on conflict on constraint {pkey}
+            insert into {self.table} values(%s, %s, %s, %s)
+            on conflict on constraint {self.pkey}
             do update set v = excluded.v
             """
 
@@ -105,7 +106,7 @@ class Saih_import():
 
     def __check_time_step(self, strdate, fi, line):
         """
-        Cheks if strdate is a valid datetime type acording self.step
+        Cheks if strdate is a valid datetime type acording self.tstep
 
         Parameters
         ----------
@@ -119,7 +120,7 @@ class Saih_import():
         Raises
         ------
         ValueError
-            Not a valid strdate or self.step.
+            Not a valid strdate or self.tstep.
 
         Returns
         -------
@@ -128,20 +129,20 @@ class Saih_import():
 
         """
         dt = datetime.strptime(strdate, '%Y-%m-%d %H:%M:%S')
-        if self.step == 'day':
+        if self.tstep == 'day':
             if dt.hour > 0 or dt.minute > 0 or dt.second > 0:
                 msg = f'Time step must be days in {fi}, line {line}'
                 logging.append(msg)
                 raise ValueError(msg)
             return date(dt.year, dt.month, dt.day)
-        elif self.step == 'hour':
+        elif self.tstep == 'hour':
             if dt.minute > 0 or dt.second > 0:
                 msg = f'Time step must be hours in {fi}, line {line}'
                 logging.append(msg)
                 raise ValueError(msg)
             return datetime(dt.year, dt.month, dt.day, dt.hour)
         else:
-            msg = f'step {self.setp} is not valid'
+            msg = f'tstep {self.tstep} is not valid'
             logging.append(msg)
             raise ValueError(msg)
 
