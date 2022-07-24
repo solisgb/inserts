@@ -4,17 +4,18 @@ Created on Sun May  1 11:47:47 2022
 
 @author: solis
 
-se importan los datos a una tabla desde ficheros csv descargados de
-la web de la chs. La tabla puede ser: la tabla saih.tsd, saih.tsh u otra tabla
-con la misma estructura y primary key que las anteriores
+Data are imported into a table from csv files downloaded from the chs website.
+The destination table can be: saih.tsd, saih.tsh or another
+table with the same structure and primary key as the previous ones.
 
-según el intervalo temporal con el que se descargan los
-datos, la discriminación temporal es distinta, datos diarios en formato
-%y-%m-%d 00:00:00 o dato horario %y-%m-%d H:00:00 o dato minutario
+The date format of the downloaded data is %y-%m-%d HH:MM:ss. Depending on the
+time interval selected when downloading the data, the content varies: If the
+data are daily the content is %y-%m-%d 00:00:00:00; if the data are hourly
+%y-%m-%d HH:00:00:00; if minute %y-%m-%d HH:MM:00
 
-Es importante que en una
-misma operación de carga de datos no se mezclen en el mismo directorio ficheros
-csv coo datos de diferente discriminación temporal: diarios, horarios
+It is important that in an operation to load data into the database, the
+selected directory does not have files of different temporal discrimination:
+daily, hourly, hourly, etc.
 
 """
 import csv
@@ -30,8 +31,10 @@ import littleLogging as logging
 
 class Saih_import():
 
+    READ_CHUNK = 5000
 
-    def __init__(self, path, tstep, pattern='*.csv'):
+    def __init__(self, path, tstep, pattern='*.csv',
+                 file_encoding='utf-8-sig', detect_delim=False, delim=';'):
         """
         Insert the data in csv files in the tsd or tsh table.
 
@@ -43,6 +46,13 @@ class Saih_import():
             date-time step: must be: ('day', 'hour')
         pattern : str, optional
             The default is '*.csv'.
+        file_encoding : str
+            encoding of the files pattern in path
+        detect_delim: bool
+            If true, the delimiter is obtained directly from each csv file
+        delim : str
+            delimiter of csv file columns. If detect_delim is true, the value
+            of delim is not considered
 
         Returns
         -------
@@ -65,6 +75,8 @@ class Saih_import():
 
         self.path = path
         self.pattern = join(path, pattern)
+        self.file_encoding = file_encoding
+        self.delim = delim
         self.insert = \
             f"""
             insert into {self.table} values(%s, %s, %s, %s)
@@ -81,9 +93,9 @@ class Saih_import():
 
     @staticmethod
     def __connect():
+        db = input('DB: ')
         user = input('User: ')
         passw = input('Password: ')
-        db = input('DB: ')
         con = psycopg2.connect(database=db, user=user, password=passw)
         return con
 
@@ -149,7 +161,9 @@ class Saih_import():
 
     def __ask_continue(self, upsert):
         logging.append(f'Files to import: {join(self.path, self.pattern)}')
-        logging.append(f'In table: {self.table}')
+        logging.append(f'Encoding of the files: {self.file_encoding}')
+        logging.append(f'Delimiter of the files: {self.delim}')
+        logging.append(f'Insert in table: {self.table}')
         logging.append(f'Upsert: {upsert}')
         ans = input('Continue?: ')
         if ans.lower() not in ('y', 's', '1'):
@@ -159,7 +173,14 @@ class Saih_import():
             return True
 
 
-    def upsert_data_from_csv_files(self, upsert=True, file_encoding='utf8'):
+    def __find_delimiter(self, filename: str):
+        sniffer = csv.Sniffer()
+        with open(filename) as fp:
+            delimiter = sniffer.sniff(fp.read(self.READ_CHUNK)).delimiter
+        return delimiter
+
+
+    def upsert_data_from_csv_files(self, upsert=True):
         """
         Inserts or upserts data in csv files
 
@@ -168,8 +189,7 @@ class Saih_import():
         upsert : bool, optional
             If False inserts only new data; is True update values too.
             The default is True.
-        file_encoding: str, optional
-            File encoding
+
         Raises
         ------
         ValueError
@@ -190,9 +210,9 @@ class Saih_import():
             n = 0
             nr0 = self.__count_rows(cur)
             for fi in self.file_names:
-                with open(fi, encoding=file_encoding) as csv_file:
+                with open(fi, encoding=self.file_encoding) as csv_file:
                     line = -1
-                    csv_reader = csv.reader(csv_file, delimiter=',')
+                    csv_reader = csv.reader(csv_file, delimiter=self.delim)
                     for line, row in enumerate(csv_reader):
                         if line == 0:
                             id1 = row[1][0:5].lower()
@@ -204,7 +224,8 @@ class Saih_import():
                         d = self.__check_time_step(row[0], fi, line)
 
                         try:
-                            x = float(row[1])
+                            x = row[1].replace(',', '.')
+                            x = float(x)
                             if upsert:
                                 cur.execute(self.upsert, (id1, d, var, x))
                             else:
